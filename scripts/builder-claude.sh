@@ -16,6 +16,10 @@ WT=$1 PROMPT=$2 RUN_ID=$3
 RUN_DIR="$FH_ROOT/runs/$RUN_ID"
 [ -d "$RUN_DIR/iterations" ] || fh_die "run dir missing: $RUN_DIR/iterations"
 [ -f "$PROMPT" ] || fh_die "prompt file missing: $PROMPT"
+[ -d "$WT" ] || fh_die "worktree missing: $WT"
+# Resolve before any cd: callers may pass repo-relative paths.
+WT="$(cd "$WT" && pwd)"
+PROMPT_TEXT="$(cat "$PROMPT")"
 
 TURN_TIMEOUT="${FH_TURN_TIMEOUT:-1800}"
 NN=$(fh_next_attempt "$RUN_DIR")
@@ -44,12 +48,15 @@ fi
 MODEL_ARGS=()
 [ -n "${FH_CLAUDE_MODEL:-}" ] && MODEL_ARGS=(--model "$FH_CLAUDE_MODEL")
 
+run_claude() {
+  cd "$WT" && exec claude -p --output-format json --safe-mode \
+    --dangerously-skip-permissions ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
+    "${SESSION_ARGS[@]}" "$PROMPT_TEXT"
+}
+
 echo "fh[claude${FH_CLAUDE_MODEL:+/$FH_CLAUDE_MODEL}] attempt $NN starting" >&2
 rc=0
-fh_timeout "$TURN_TIMEOUT" "$MARKER" bash -c '
-  cd "$1" && shift && exec claude -p --output-format json --safe-mode \
-    --dangerously-skip-permissions "$@"
-' _ "$WT" "${MODEL_ARGS[@]:-}" "${SESSION_ARGS[@]}" "$(cat "$PROMPT")" > "$RAW" 2> "$RUN_DIR/iterations/$NN.stderr" || rc=$?
+fh_timeout "$TURN_TIMEOUT" "$MARKER" run_claude > "$RAW" 2> "$RUN_DIR/iterations/$NN.stderr" || rc=$?
 
 timed_out=false
 [ "$rc" -eq 124 ] && timed_out=true

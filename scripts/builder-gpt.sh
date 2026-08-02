@@ -15,6 +15,10 @@ WT=$1 PROMPT=$2 RUN_ID=$3
 RUN_DIR="$FH_ROOT/runs/$RUN_ID"
 [ -d "$RUN_DIR/iterations" ] || fh_die "run dir missing: $RUN_DIR/iterations"
 [ -f "$PROMPT" ] || fh_die "prompt file missing: $PROMPT"
+[ -d "$WT" ] || fh_die "worktree missing: $WT"
+# Resolve before any cd: callers may pass repo-relative paths.
+WT="$(cd "$WT" && pwd)"
+PROMPT_TEXT="$(cat "$PROMPT")"
 
 MODEL="${FH_GPT_MODEL:-gpt-5.6-sol}"
 TURN_TIMEOUT="${FH_TURN_TIMEOUT:-1800}"
@@ -28,13 +32,15 @@ mkdir -p "$SESSION_DIR"
 CONT=()
 if compgen -G "$SESSION_DIR/*.jsonl" > /dev/null; then CONT=(--continue); fi
 
+run_pi() {
+  cd "$WT" && exec pi --provider openai-codex --model "$MODEL" --mode json -p \
+    --session-dir "$SESSION_DIR" ${CONT[@]+"${CONT[@]}"} \
+    --no-extensions --no-skills --no-context-files "$PROMPT_TEXT"
+}
+
 echo "fh[gpt/$MODEL] attempt $NN starting" >&2
 rc=0
-fh_timeout "$TURN_TIMEOUT" "$MARKER" bash -c '
-  cd "$1" && exec pi --provider openai-codex --model "$2" --mode json -p \
-    --session-dir "$3" "${@:5}" \
-    --no-extensions --no-skills --no-context-files "$(cat "$4")"
-' _ "$WT" "$MODEL" "$SESSION_DIR" "$PROMPT" "${CONT[@]:-}" > "$RAW" 2> "$RUN_DIR/iterations/$NN.stderr" || rc=$?
+fh_timeout "$TURN_TIMEOUT" "$MARKER" run_pi > "$RAW" 2> "$RUN_DIR/iterations/$NN.stderr" || rc=$?
 
 timed_out=false
 [ "$rc" -eq 124 ] && timed_out=true

@@ -25,7 +25,7 @@ Repeat until pass, exhaustion, or halt. Let `RUN=runs/<run-id>`.
 
 1. **Pause check.** If `$RUN/control/PAUSE` exists, tell the user the loop is paused and wait (poll with a background sleep); when the sentinel disappears, run the gates first (step 4) before any new dispatch — the user's edits become part of the iteration.
 2. **Attempt budget.** If `attempts >= max_attempts` in `$RUN/state.json`, go to Exhaustion.
-3. **Dispatch one builder turn.** First attempt: fill `prompts/builder-task.md` with the task text. Later attempts: fill `prompts/iteration-feedback.md` with the failing gate results (the `output` fields verbatim). Write the prompt to `$RUN/iterations/NN-prompt.md`, then
+3. **Dispatch one builder turn.** First attempt: fill `prompts/builder-task.md` with the task text (`scripts/fill-prompt.sh prompts/builder-task.md '{{TASK}}' <task-file>`). Later attempts: fill `prompts/iteration-feedback.md` with the failing gate results (the `output` fields verbatim, via `fill-prompt.sh`). Write the prompt to `$RUN/iterations/NN-prompt.md`, then
    `scripts/pane.sh dispatch <run-id> -- scripts/builder-<builder>.sh worktrees/<run-id> $RUN/iterations/NN-prompt.md <run-id>`
    and poll for `$RUN/iterations/NN.json` (the completion signal; use a background `sleep`-loop, checking the pause sentinel between polls). On `timed_out: true` or a non-zero `exit` with no useful text, count the attempt and treat it as a failure with the stderr tail as feedback. Increment `attempts` in state.json (jq in-place).
 4. **Run the gates.** `scripts/run-gates.sh $RUN worktrees/<run-id> > $RUN/gates-result.json`; show the user the one-line pass/fail summary per gate.
