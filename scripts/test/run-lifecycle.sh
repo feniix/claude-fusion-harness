@@ -13,12 +13,12 @@ check() { if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   - $1"; else FAI
 CLONE="$(mktemp -d)/clone"
 mkdir -p "$CLONE"
 (cd "$ROOT" && git ls-files -co --exclude-standard | tar -cf - -T -) | (cd "$CLONE" && tar -xf -)
+rm -f "$CLONE/runs/log.jsonl" # tests assert absolute line counts from a clean log
 git -C "$CLONE" init -q -b main
 git -C "$CLONE" config user.email test@example.com
 git -C "$CLONE" config user.name test
 git -C "$CLONE" add -A
 git -C "$CLONE" commit -qm init
-rm -f "$CLONE/runs/log.jsonl" # tests assert absolute line counts from a clean log
 trap 'rm -rf "$(dirname "$CLONE")"' EXIT
 S="$CLONE/scripts"
 
