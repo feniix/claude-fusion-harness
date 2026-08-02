@@ -1,0 +1,6 @@
+# Per-run artifacts (worktrees and run directories are disposable; the run log is tracked)
+worktrees/
+runs/*/
+
+# OS noise
+.DS_Store

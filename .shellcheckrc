@@ -1,0 +1,4 @@
+# SC1091: sourced common.sh resolves at runtime relative to the script dir
+# SC2016: single-quoted bash -c bodies take args via positional parameters by design
+# SC2329: run_* functions are invoked indirectly through fh_timeout
+disable=SC1091,SC2016,SC2329
