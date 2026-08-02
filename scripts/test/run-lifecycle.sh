@@ -3,10 +3,7 @@
 # repo so the real checkout is never touched.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-PASS=0 FAIL=0
-check() { if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   - $1"; else FAIL=$((FAIL + 1)); echo "FAIL - $1"; fi; }
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/harness.sh"
 
 # Copy the working tree (tracked + untracked, minus ignored) into a scratch
 # repo so uncommitted script changes are exercised and the real repo is safe.
@@ -36,9 +33,7 @@ check "run dir skeleton complete" "$rcv"
 
 # collision refusal
 "$S/run-init.sh" test-1 gpt 5 > /dev/null 2>&1
-rc=$?
-nonzero=0; [ "$rc" -ne 0 ] || nonzero=1
-check "init refuses existing run-id" "$nonzero"
+check_nonzero "init refuses existing run-id" $?
 
 # finish updates state
 "$S/run-finish.sh" test-1 failed > /dev/null 2>&1
@@ -65,6 +60,4 @@ check "log record carries outcome, per-gate results, usage" $?
 [ "$(wc -l < "$CLONE/runs/log.jsonl" | tr -d ' ')" = "2" ] && tail -1 "$CLONE/runs/log.jsonl" | jq -e '.run_id == "test-2" and .builder == "claude"' > /dev/null
 check "two runs append two JSONL lines" $?
 
-echo
-echo "run-lifecycle: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish "run-lifecycle"

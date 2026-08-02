@@ -43,7 +43,7 @@ docs/plans/                     the plan this repo was built from
 ## Verify
 
 ```
-shellcheck scripts/*.sh scripts/lib/*.sh scripts/test/*.sh
+shellcheck scripts/*.sh scripts/lib/*.sh scripts/test/*.sh scripts/test/lib/*.sh
 scripts/test/run-gates.sh && scripts/test/run-lifecycle.sh && scripts/test/pane.sh
 scripts/test/builder-adapters.sh   # spends a few subscription tokens
 ```

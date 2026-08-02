@@ -40,7 +40,7 @@ case "$CMD" in
     [ -e "$CTL" ] && fh_die "container already up for run $RUN_ID (down it first)"
     mkdir -p "$(dirname "$CTL")" "$(dirname "$(console "$RUN_ID")")"
     if herdr_up; then
-      herdr agent start "fusion-$RUN_ID" --cwd "$WT" --no-focus -- bash > /dev/null 2>&1 ||
+      fh_herdr agent start "fusion-$RUN_ID" --cwd "$WT" --no-focus -- bash > /dev/null 2>&1 ||
         fh_die "herdr agent start failed for fusion-$RUN_ID"
       pane_id=$(herdr_pane_id "$RUN_ID" || true)
       jq -n --arg mode pane --arg agent "fusion-$RUN_ID" --arg pane_id "${pane_id:-}" --arg wt "$WT" \
@@ -63,13 +63,14 @@ case "$CMD" in
     if [ "$mode" = "pane" ]; then
       pane_id=$(jq -r '.pane_id // empty' "$CTL")
       [ -n "$pane_id" ] || pane_id=$(herdr_pane_id "$RUN_ID") || fh_die "cannot resolve pane id for fusion-$RUN_ID"
+      # The pane shell's cwd is the worktree; SKILL.md dispatches repo-root-
+      # relative paths, so anchor the command at FH_ROOT explicitly.
       cmd_str=$(printf '%q ' "$@")
-      herdr pane run "$pane_id" "$cmd_str" > /dev/null 2>&1 || fh_die "herdr pane run failed"
+      fh_herdr pane run "$pane_id" "cd $(printf '%q' "$FH_ROOT") && $cmd_str" > /dev/null 2>&1 || fh_die "herdr pane run failed"
     else
       nohup "$@" >> "$(console "$RUN_ID")" 2>&1 &
       pid=$!
-      tmp=$(mktemp)
-      jq --argjson pid "$pid" '.pids += [$pid]' "$CTL" > "$tmp" && mv "$tmp" "$CTL"
+      fh_jq_inplace "$CTL" '.pids += [$pid]' --argjson pid "$pid"
     fi
     echo "fh: dispatched builder turn for run $RUN_ID ($mode)" >&2
     ;;
@@ -92,18 +93,21 @@ case "$CMD" in
     if [ "$(jq -r '.mode' "$CTL")" = "pane" ]; then
       pane_id=$(jq -r '.pane_id // empty' "$CTL")
       [ -n "$pane_id" ] || pane_id=$(herdr_pane_id "$RUN_ID" || true)
-      [ -n "$pane_id" ] && herdr pane close "$pane_id" > /dev/null 2>&1 || true
+      if [ -z "$pane_id" ]; then
+        echo "fh: cannot resolve pane id for fusion-$RUN_ID — the pane may still be open; control file kept so down can be retried" >&2
+        exit 1
+      fi
+      if ! fh_herdr pane close "$pane_id" > /dev/null 2>&1; then
+        echo "fh: herdr pane close failed for pane $pane_id — control file kept so down can be retried" >&2
+        exit 1
+      fi
     else
       while IFS= read -r pid; do
-        [ -n "$pid" ] || continue
-        pkill -TERM -P "$pid" 2> /dev/null || true
-        kill -TERM "$pid" 2> /dev/null || true
+        [ -n "$pid" ] && fh_kill_tree "$pid" TERM
       done < <(jq -r '.pids[]?' "$CTL")
       sleep 1
       while IFS= read -r pid; do
-        [ -n "$pid" ] || continue
-        pkill -KILL -P "$pid" 2> /dev/null || true
-        kill -KILL "$pid" 2> /dev/null || true
+        [ -n "$pid" ] && fh_kill_tree "$pid" KILL
       done < <(jq -r '.pids[]?' "$CTL")
     fi
     rm -f "$CTL"

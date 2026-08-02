@@ -2,10 +2,7 @@
 # Tests for the gate runner. No model calls — pure local fixtures.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-PASS=0 FAIL=0
-check() { if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   - $1"; else FAIL=$((FAIL + 1)); echo "FAIL - $1"; fi; }
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/harness.sh"
 
 RUN_DIR="$(mktemp -d)"
 WT="$(mktemp -d)"
@@ -28,9 +25,7 @@ EOF
 chmod +x "$RUN_DIR/gates/"*.sh
 
 out="$("$ROOT/scripts/run-gates.sh" "$RUN_DIR" "$WT" 2> /dev/null)"
-rc=$?
-nonzero=0; [ "$rc" -ne 0 ] || nonzero=1
-check "failing gate makes overall exit non-zero" "$nonzero"
+check_nonzero "failing gate makes overall exit non-zero" $?
 echo "$out" | jq -e 'length == 3' > /dev/null
 check "JSON array has one result per gate" $?
 echo "$out" | jq -e '.[0].gate == "01-pass.sh" and .[1].gate == "02-fail.sh" and .[2].gate == "03-order.sh"' > /dev/null
@@ -62,7 +57,7 @@ exit 0
 EOF
 out="$("$ROOT/scripts/run-gates.sh" "$RUN_DIR" "$WT" 2> /dev/null)"
 rc=$?
-[ "$rc" -ne 0 ] && echo "$out" | jq -e '[.[] | select(.gate == "05-noexec.sh")] | .[0].pass == false and (.[0].output | contains("not executable"))' > /dev/null
+{ [ "$rc" -ne 0 ] && echo "$out" | jq -e '[.[] | select(.gate == "05-noexec.sh")] | .[0].pass == false and (.[0].output | contains("not executable"))' > /dev/null; }
 check "non-executable gate reported as gate error" $?
 rm "$RUN_DIR/gates/05-noexec.sh"
 
@@ -95,9 +90,8 @@ rm -rf "$BASE"
 # Empty gates dir is a distinct error (a run with no gates is invalid, R4)
 rm "$RUN_DIR/gates/"*.sh
 "$ROOT/scripts/run-gates.sh" "$RUN_DIR" "$WT" > /dev/null 2>&1
-[ $? -eq 2 ]
-check "empty gates dir exits 2" $?
+rc=$?
+rcv=0; [ "$rc" -eq 2 ] || rcv=1
+check "empty gates dir exits 2" "$rcv"
 
-echo
-echo "run-gates: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish "run-gates"

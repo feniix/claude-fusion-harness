@@ -11,20 +11,8 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-[ $# -eq 3 ] || fh_die "usage: builder-claude.sh <worktree> <prompt-file> <run-id>"
-WT=$1 PROMPT=$2 RUN_ID=$3
-RUN_DIR="$FH_ROOT/runs/$RUN_ID"
-[ -d "$RUN_DIR/iterations" ] || fh_die "run dir missing: $RUN_DIR/iterations"
-[ -f "$PROMPT" ] || fh_die "prompt file missing: $PROMPT"
-[ -d "$WT" ] || fh_die "worktree missing: $WT"
-# Resolve before any cd: callers may pass repo-relative paths.
-WT="$(cd "$WT" && pwd)"
-PROMPT_TEXT="$(cat "$PROMPT")"
-
-TURN_TIMEOUT="${FH_TURN_TIMEOUT:-1800}"
-NN=$(fh_next_attempt "$RUN_DIR")
+fh_builder_setup "builder-claude.sh" "$@"
 RAW="$RUN_DIR/iterations/$NN.claude.json"
-MARKER="$RUN_DIR/iterations/$NN.timeout"
 STATE="$RUN_DIR/state.json"
 
 # Claude session ids must be UUIDs (KTD8): mint one on the first turn, store
@@ -38,8 +26,7 @@ else
   SESSION_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
   SESSION_ARGS=(--session-id "$SESSION_UUID")
   if [ -f "$STATE" ]; then
-    tmp=$(mktemp)
-    jq --arg id "$SESSION_UUID" '.claude_session_id = $id' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
+    fh_jq_inplace "$STATE" '.claude_session_id = $id' --arg id "$SESSION_UUID"
   else
     jq -n --arg id "$SESSION_UUID" '{claude_session_id: $id}' > "$STATE"
   fi
@@ -58,18 +45,13 @@ echo "fh[claude${FH_CLAUDE_MODEL:+/$FH_CLAUDE_MODEL}] attempt $NN starting" >&2
 rc=0
 fh_timeout "$TURN_TIMEOUT" "$MARKER" run_claude > "$RAW" 2> "$RUN_DIR/iterations/$NN.stderr" || rc=$?
 
-timed_out=false
-[ "$rc" -eq 124 ] && timed_out=true
-
 text=$(jq -r '.result // ""' "$RAW" 2> /dev/null || echo "")
-usage=$(jq -c '{input: (.usage.input_tokens // 0), output: (.usage.output_tokens // 0), total: ((.usage.input_tokens // 0) + (.usage.output_tokens // 0)), cost: (.total_cost_usd // 0)}' "$RAW" 2> /dev/null || echo '{"input":0,"output":0,"total":0,"cost":0}')
+usage=$(jq -c '{input: (.usage.input_tokens // 0), output: (.usage.output_tokens // 0), total: ((.usage.input_tokens // 0) + (.usage.output_tokens // 0)), cost: (.total_cost_usd // 0)}' "$RAW" 2> /dev/null || echo "$FH_ZERO_USAGE")
+# jq on an empty $RAW exits 0 with empty output, so the || fallback alone
+# cannot be trusted (review finding: 0-byte result on timed-out/empty turns).
+[ -n "$usage" ] || usage=$FH_ZERO_USAGE
 
-if [ "$rc" -eq 0 ] && [ -z "$text" ]; then rc=1; fi
-
-jq -n --arg builder claude --arg model "${FH_CLAUDE_MODEL:-default}" --arg attempt "$NN" --arg text "$text" \
-  --argjson usage "$usage" --argjson exit "$rc" --argjson timed_out "$timed_out" \
-  '{builder: $builder, model: $model, attempt: $attempt, exit: $exit, timed_out: $timed_out, text: $text, usage: $usage}' |
-  fh_write_result "$RUN_DIR" "$NN"
-
+rc=$(fh_effective_rc "$rc" "$text")
+fh_emit_result "$RUN_DIR" "$NN" claude "${FH_CLAUDE_MODEL:-default}" "$text" "$usage" "$rc"
 echo "fh[claude] attempt $NN done (exit $rc)" >&2
 exit "$rc"

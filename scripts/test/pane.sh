@@ -3,10 +3,7 @@
 # the pane-mode path is exercised in the U7 e2e when a server is running).
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-PASS=0 FAIL=0
-check() { if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   - $1"; else FAIL=$((FAIL + 1)); echo "FAIL - $1"; fi; }
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/harness.sh"
 
 RUN_ID="test-pane-$$"
 RUN_DIR="$ROOT/runs/$RUN_ID"
@@ -20,9 +17,7 @@ P="$ROOT/scripts/pane.sh"
 export FH_FORCE_HEADLESS=1
 
 "$P" available > /dev/null 2>&1
-rcv=$?
-nonzero=0; [ "$rcv" -ne 0 ] || nonzero=1
-check "available reports headless under FH_FORCE_HEADLESS" "$nonzero"
+check_nonzero "available reports headless under FH_FORCE_HEADLESS" $?
 
 "$P" up "$RUN_ID" "$WT" > /dev/null 2>&1
 check "up succeeds in fallback mode" $?
@@ -30,9 +25,7 @@ jq -e '.mode == "background"' "$RUN_DIR/control/pane.json" > /dev/null 2>&1
 check "up records background mode" $?
 
 "$P" up "$RUN_ID" "$WT" > /dev/null 2>&1
-rcv=$?
-nonzero=0; [ "$rcv" -ne 0 ] || nonzero=1
-check "second up for same run-id refuses" "$nonzero"
+check_nonzero "second up for same run-id refuses" $?
 
 # Dispatch a slow command, verify it's observable, then kill it via down.
 "$P" dispatch "$RUN_ID" -- bash -c 'echo dispatch-started; sleep 300; echo never' > /dev/null 2>&1
@@ -58,6 +51,4 @@ rcv=0; [ -f "$RUN_DIR/iterations/01.json" ] || rcv=1
 check "dispatched command's result file appears (completion signal)" "$rcv"
 "$P" down "$RUN_ID" > /dev/null 2>&1
 
-echo
-echo "pane: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish "pane"

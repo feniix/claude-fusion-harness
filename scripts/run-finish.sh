@@ -13,8 +13,7 @@ case "$OUTCOME" in passed | failed | aborted) ;; *) fh_die "outcome must be pass
 STATE="$FH_ROOT/runs/$RUN_ID/state.json"
 [ -f "$STATE" ] || fh_die "no state file for run: $RUN_ID"
 
-tmp=$(mktemp)
-jq --arg outcome "$OUTCOME" --arg ended "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson epoch "$(date +%s)" \
-  '.status = $outcome | .ended_at = $ended | .ended_epoch = $epoch' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
+fh_jq_inplace "$STATE" '.status = $outcome | .ended_at = $ended | .ended_epoch = $epoch' \
+  --arg outcome "$OUTCOME" --arg ended "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson epoch "$(date +%s)"
 
 echo "fh: run $RUN_ID finished: $OUTCOME" >&2

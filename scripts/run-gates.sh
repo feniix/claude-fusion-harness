@@ -16,8 +16,8 @@ RUN_DIR=$1 WT=$2
 [ -d "$RUN_DIR" ] || fh_die "run dir missing: $RUN_DIR"
 [ -d "$WT" ] || fh_die "worktree missing: $WT"
 # Resolve before any cd: callers may pass repo-relative paths.
-RUN_DIR="$(cd "$RUN_DIR" && pwd)"
-WT="$(cd "$WT" && pwd)"
+RUN_DIR=$(fh_abspath "$RUN_DIR")
+WT=$(fh_abspath "$WT")
 GATES_DIR="$RUN_DIR/gates"
 GATE_TIMEOUT="${FH_GATE_TIMEOUT:-300}"
 TAIL_LINES=50
@@ -28,7 +28,7 @@ gates=()
 while IFS= read -r g; do gates+=("$g"); done < <(find "$GATES_DIR" -maxdepth 1 -name '*.sh' | sort)
 [ "${#gates[@]}" -gt 0 ] || { echo "fh: no gates in $GATES_DIR — a run with no gates is invalid" >&2; exit 2; }
 
-results='[]'
+entries=()
 overall=0
 for gate in "${gates[@]}"; do
   name=$(basename "$gate")
@@ -50,12 +50,12 @@ for gate in "${gates[@]}"; do
   [ "$rc" -ne 0 ] && overall=1
 
   output=$(tail -n "$TAIL_LINES" "$outfile")
-  results=$(jq -c --arg gate "$name" --argjson pass "$pass" --argjson exit "$rc" \
+  entries+=("$(jq -c -n --arg gate "$name" --argjson pass "$pass" --argjson exit "$rc" \
     --argjson timed_out "$timed_out" --argjson duration "$duration" --arg output "$output" \
-    '. + [{gate: $gate, pass: $pass, exit: $exit, timed_out: $timed_out, duration_secs: $duration, output: $output}]' <<< "$results")
+    '{gate: $gate, pass: $pass, exit: $exit, timed_out: $timed_out, duration_secs: $duration, output: $output}')")
   printf 'fh[gate] %-30s %s (exit %d, %ds)\n' "$name" "$([ "$pass" = true ] && echo PASS || echo FAIL)" "$rc" "$duration" >&2
   rm -f "$outfile" "$marker"
 done
 
-echo "$results" | jq .
+printf '%s\n' "${entries[@]}" | jq -s .
 exit "$overall"

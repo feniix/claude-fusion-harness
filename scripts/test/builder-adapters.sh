@@ -4,13 +4,7 @@
 # Verification Contract.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-PASS=0 FAIL=0
-
-check() { # name condition-result
-  if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   - $1"; else FAIL=$((FAIL + 1)); echo "FAIL - $1"; fi
-}
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/harness.sh"
 
 RUN_ID="test-adapters-$$"
 RUN_DIR="$ROOT/runs/$RUN_ID"
@@ -61,18 +55,20 @@ check "gpt: turn timeout kills and marks timed_out" $?
 # --- Claude adapter ------------------------------------------------------
 export FH_CLAUDE_MODEL="${FH_CLAUDE_MODEL:-haiku}"
 
+# Production always has state.json before the first turn (run-init creates
+# it), so pre-seed it here to exercise the fh_jq_inplace merge branch.
+echo '{"run_id":"'"$RUN_ID"'"}' > "$RUN_DIR/state.json"
+
 "$ROOT/scripts/builder-claude.sh" "$WT" "$prompt" "$RUN_ID"
 check "claude: happy-path exit 0" $?
 out="$RUN_DIR/iterations/06.json"
 [ -f "$out" ] && jq -e '.text | contains("ADAPTER-OK")' "$out" > /dev/null
 check "claude: result file has ADAPTER-OK text" $?
-jq -e '.claude_session_id | length > 0' "$RUN_DIR/state.json" > /dev/null
-check "claude: session uuid stored in state.json" $?
+jq -e --arg rid "$RUN_ID" '(.claude_session_id | length > 0) and .run_id == $rid' "$RUN_DIR/state.json" > /dev/null
+check "claude: session uuid merged into existing state.json" $?
 
 "$ROOT/scripts/builder-claude.sh" "$WT" "$prompt2" "$RUN_ID"
 jq -e '.text | contains("ADAPTER-OK")' "$RUN_DIR/iterations/07.json" > /dev/null
 check "claude: session resumes across attempts" $?
 
-echo
-echo "builder-adapters: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish "builder-adapters"
