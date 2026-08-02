@@ -40,7 +40,7 @@ Repeat until pass, exhaustion, or halt. Let `RUN=runs/<run-id>`.
 
 Always: `scripts/pane.sh down <run-id>`, then `scripts/run-finish.sh <run-id> <outcome>`, then `scripts/log-run.sh <run-id>`.
 
-- **Success (`passed`):** report the passing gates, token/cost totals from the iteration files, and point the user at branch `fusion/<run-id>` for review and merge — merging is deliberately theirs.
+- **Success (`passed`):** commit the builder's work on the run branch (`git -C worktrees/<run-id> add -A && git -C worktrees/<run-id> commit -m "fusion: <task summary> (run <run-id>)"`) so the diff is durable, then report the passing gates, token/cost totals from the iteration files, and point the user at branch `fusion/<run-id>` for review and merge — merging is deliberately theirs.
 - **Exhaustion (`failed`):** write `$RUN/post-mortem.md` per `prompts/post-mortem.md`, then report it. The branch keeps the best attempt.
 - **User interrupt (`aborted`):** `pane.sh down` kills the builder process tree; the worktree stays for inspection.
 

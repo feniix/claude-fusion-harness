@@ -18,6 +18,7 @@ git -C "$CLONE" config user.email test@example.com
 git -C "$CLONE" config user.name test
 git -C "$CLONE" add -A
 git -C "$CLONE" commit -qm init
+rm -f "$CLONE/runs/log.jsonl" # tests assert absolute line counts from a clean log
 trap 'rm -rf "$(dirname "$CLONE")"' EXIT
 S="$CLONE/scripts"
 
