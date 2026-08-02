@@ -78,6 +78,20 @@ rc=$?
 check "hanging gate killed and marked timed_out" $?
 rm "$RUN_DIR/gates/06-hang.sh"
 
+# Relative paths must resolve (regression: gate exec after cd into worktree)
+cat > "$RUN_DIR/gates/07-rel.sh" << 'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$RUN_DIR/gates/07-rel.sh"
+BASE="$(mktemp -d)"
+ln -s "$RUN_DIR" "$BASE/rel-run"
+ln -s "$WT" "$BASE/rel-wt"
+(cd "$BASE" && "$ROOT/scripts/run-gates.sh" rel-run rel-wt > /dev/null 2>&1)
+check "relative run-dir/worktree paths resolve" $?
+rm "$RUN_DIR/gates/07-rel.sh"
+rm -rf "$BASE"
+
 # Empty gates dir is a distinct error (a run with no gates is invalid, R4)
 rm "$RUN_DIR/gates/"*.sh
 "$ROOT/scripts/run-gates.sh" "$RUN_DIR" "$WT" > /dev/null 2>&1

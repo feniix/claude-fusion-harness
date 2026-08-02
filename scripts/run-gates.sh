@@ -13,6 +13,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 [ $# -eq 2 ] || fh_die "usage: run-gates.sh <run-dir> <worktree>"
 RUN_DIR=$1 WT=$2
+[ -d "$RUN_DIR" ] || fh_die "run dir missing: $RUN_DIR"
+[ -d "$WT" ] || fh_die "worktree missing: $WT"
+# Resolve before any cd: callers may pass repo-relative paths.
+RUN_DIR="$(cd "$RUN_DIR" && pwd)"
+WT="$(cd "$WT" && pwd)"
 GATES_DIR="$RUN_DIR/gates"
 GATE_TIMEOUT="${FH_GATE_TIMEOUT:-300}"
 TAIL_LINES=50
